@@ -270,7 +270,7 @@ public:
             pcl::ConvexHull<PointType> chull;
             chull.setInputCloud (cloud_plane);
             chull.reconstruct (*cloud_hull);
-            pcl::visualization::PointCloudColorHandlerCustom<PointType> blue(cloud_hull, 0, 255, 0);
+            pcl::visualization::PointCloudColorHandlerCustom<PointType> blue(cloud_hull, 0, 0, 255);
             if (!cloud_viewer_->updatePointCloud (cloud_hull, blue, "Hull"))
             {
                 cloud_viewer_->addPointCloud (cloud_hull, blue, "Hull");
@@ -286,7 +286,7 @@ public:
 
 
     	    std::cout << "PointCloud representing after projection component: " << objects->points.size () << " data points." << std::endl;
- 	    pcl::visualization::PointCloudColorHandlerCustom<PointType> red(cloud_rest, 255, 0, 0);
+ 	    pcl::visualization::PointCloudColorHandlerCustom<PointType> red(objects, 255, 0, 0);
             if (!cloud_viewer_->updatePointCloud (objects,red, "objects"))
             {
                 cloud_viewer_->addPointCloud (objects,red, "objects");
@@ -296,7 +296,7 @@ public:
             extract.setNegative (true);
             extract.filter (*cloud_rest);
             filtered.swap (cloud_rest);
-            pcl::visualization::PointCloudColorHandlerCustom<PointType> yellow(cloud_rest, 0, 255, 0);
+            pcl::visualization::PointCloudColorHandlerCustom<PointType> yellow(cloud_rest, 255, 255, 0);
             if (!cloud_viewer_->updatePointCloud (cloud_rest,yellow, "rest"))
             {
                 cloud_viewer_->addPointCloud (cloud_rest,yellow, "rest");
