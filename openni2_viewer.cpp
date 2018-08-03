@@ -32,6 +32,8 @@
 #include <vector>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/features/cvfh.h>
 
 using namespace std;
 using namespace cv;
@@ -233,7 +235,7 @@ public:
             seg.setModelType (pcl::SACMODEL_PLANE);
             seg.setMethodType (pcl::SAC_RANSAC);
             seg.setMaxIterations (1000);
-            seg.setDistanceThreshold (0.05);
+            seg.setDistanceThreshold (0.02);
             pcl::ExtractIndices<PointType> extract;
             seg.setInputCloud (filtered);
             seg.segment (*inliers, *coefficients);
@@ -298,6 +300,7 @@ public:
             ec.setSearchMethod (tree);
             ec.setInputCloud (cloud_abovePlane);
             ec.extract (cluster_indices);
+
             pcl::PointCloud<pcl::PointXYZ>::Ptr cloud2 (new pcl::PointCloud<pcl::PointXYZ>);
             cloud2->points.resize(cloud_abovePlane->size());
             cloud2->width=cloud_abovePlane->width;
@@ -327,19 +330,38 @@ public:
                     cloud_cluster->height = 1;
                     cloud_cluster->is_dense = true;
                     pcl::visualization::PointCloudColorHandlerRandom<pcl::PointXYZ> random(cloud_cluster);
+                    pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normalEstimation;
+                    pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
+                    normalEstimation.setInputCloud (cloud_cluster);
+                    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree_xyz(new pcl::search::KdTree<pcl::PointXYZ>);
+                    normalEstimation.setSearchMethod (tree_xyz);
+                    normalEstimation.setRadiusSearch(0.03);
+                    normalEstimation.compute (*normals);
+                    pcl::CVFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::VFHSignature308> cvfh;
+                    cvfh.setInputCloud (cloud_cluster);
+                    cvfh.setInputNormals(normals);
+                    cvfh.setSearchMethod (tree_xyz);
+                    cvfh.setEPSAngleThreshold(5.0 / 180.0 * M_PI);
+                    cvfh.setCurvatureThreshold(1.0);
+                    cvfh.setNormalizeBins(false);
+                    pcl::PointCloud<pcl::VFHSignature308>::Ptr vfhs(new pcl::PointCloud<pcl::VFHSignature308>);
+                    cvfh.compute (*vfhs);
                     char filename[20] = {0};
                     char filename_temp[20] = {0};
+                    char filename_vfhs[20] = {0};
                     static int i=0;
                     std::cout<<"the "<<i<<" is saved"<<std::endl;
                     std::cout<<"dirName= "<<dirName<<std::endl;
                     sprintf(filename_temp,"./%s/",dirName);
                     sprintf(filename,"%s%d.pcd",filename_temp,i);
+                    sprintf(filename_vfhs,"%s%d_vfhs.pcd",filename_temp,i);
                     std::cout<<"filename= "<<filename<<std::endl;
                     if (!cloud_viewer_->updatePointCloud (cloud_cluster, random, filename))
                     {
                         cloud_viewer_->addPointCloud (cloud_cluster, random, filename);
                     }
                     pcl::io::savePCDFile (filename, *cloud_cluster);
+                    pcl::io::savePCDFile (filename_vfhs, *vfhs,false);
                     i++;
                 }//cluster循环结束
             }//for文件夹循环结束
