@@ -221,7 +221,7 @@ public:
             CloudPtr filtered(new Cloud);
             CloudPtr cloud_rest(new Cloud);
             CloudPtr cloud_plane(new Cloud);
-      	    CloudPtr objects (new Cloud);
+            CloudPtr cloud_abovePlane (new Cloud);
             pcl::VoxelGrid<PointType> p;
             p.setInputCloud (cloud);
             p.setLeafSize (0.01f, 0.01f, 0.01f);
@@ -233,8 +233,7 @@ public:
             seg.setModelType (pcl::SACMODEL_PLANE);
             seg.setMethodType (pcl::SAC_RANSAC);
             seg.setMaxIterations (1000);
-            seg.setDistanceThreshold (0.01);
-////////////////////////
+            seg.setDistanceThreshold (0.05);
             pcl::ExtractIndices<PointType> extract;
             seg.setInputCloud (filtered);
             seg.segment (*inliers, *coefficients);
@@ -245,15 +244,14 @@ public:
             }
             extract.setInputCloud (filtered);
             extract.setIndices (inliers);
-            extract.setNegative (false);
-            extract.filter (*cloud_plane);
-//
-      	    PointIndices::Ptr indices_but_the_plane (new PointIndices);
-            extract.getRemovedIndices (*indices_but_the_plane);
-      	    PointIndices::Ptr points_above_plane (new PointIndices);
-//
-    	    std::cout << "PointCloud representing the planar component: " << cloud_plane->points.size () << " data points." << std::endl;
-
+            extract.setNegative (true);
+            extract.filter (*cloud_rest);
+            std::cout << "PointCloud representing the rest component: " << cloud_rest->points.size () << " data points." << std::endl;
+            pcl::visualization::PointCloudColorHandlerCustom<PointType> white(cloud_rest, 255, 255, 255);
+            if (!cloud_viewer_->updatePointCloud (cloud_rest,white, "rest"))
+            {
+                cloud_viewer_->addPointCloud (cloud_rest,white, "rest");
+            }
             pcl::ProjectInliers<PointType> proj;
             proj.setModelType (pcl::SACMODEL_PLANE);
             proj.setIndices (inliers);
@@ -261,7 +259,7 @@ public:
             proj.setModelCoefficients (coefficients);
             proj.filter (*cloud_plane);
             pcl::visualization::PointCloudColorHandlerCustom<PointType> green(cloud_plane, 0, 255, 0);
-    	    std::cout << "PointCloud representing after projection component: " << cloud_plane->points.size () << " data points." << std::endl;
+            std::cout << "PointCloud representing after projection component: " << cloud_plane->points.size () << " data points." << std::endl;
             if (!cloud_viewer_->updatePointCloud (cloud_plane, green, "Planar"))
             {
                 cloud_viewer_->addPointCloud (cloud_plane, green, "Planar");
@@ -276,54 +274,40 @@ public:
                 cloud_viewer_->addPointCloud (cloud_hull, blue, "Hull");
             }
             pcl::ExtractPolygonalPrismData<PointType> eppd;
-            eppd.setInputCloud (cloud);
-            eppd.setIndices (indices_but_the_plane);
+            eppd.setInputCloud (cloud_rest);
             eppd.setInputPlanarHull (cloud_hull);
-            eppd.setHeightLimits (0.001, 0.5);
-            eppd.segment(*points_above_plane);
-            extract.setIndices(points_above_plane);
-            extract.filter(*objects);
-
-
-    	    std::cout << "PointCloud representing after projection component: " << objects->points.size () << " data points." << std::endl;
- 	    pcl::visualization::PointCloudColorHandlerCustom<PointType> red(objects, 255, 0, 0);
-            if (!cloud_viewer_->updatePointCloud (objects,red, "objects"))
+            eppd.setHeightLimits (0.0, 0.5);
+            eppd.segment(*inliers);
+            extract.setInputCloud (cloud_rest);
+            extract.setIndices(inliers);
+            extract.setNegative (false);
+            extract.filter(*cloud_abovePlane);
+            std::cout << "PointCloud representing cloud_abovePlane component: " << cloud_abovePlane->points.size () << " data points." << std::endl;
+            pcl::visualization::PointCloudColorHandlerCustom<PointType> yellow(cloud_abovePlane, 255, 255, 0);
+            if (!cloud_viewer_->updatePointCloud (cloud_abovePlane,yellow, "cloud_abovePlane"))
             {
-                cloud_viewer_->addPointCloud (objects,red, "objects");
-            }
-
-
-            extract.setNegative (true);
-            extract.filter (*cloud_rest);
-            filtered.swap (cloud_rest);
-            pcl::visualization::PointCloudColorHandlerCustom<PointType> yellow(cloud_rest, 255, 255, 0);
-            if (!cloud_viewer_->updatePointCloud (cloud_rest,yellow, "rest"))
-            {
-                cloud_viewer_->addPointCloud (cloud_rest,yellow, "rest");
+                cloud_viewer_->addPointCloud (cloud_abovePlane,yellow, "cloud_abovePlane");
             }
             TreeTypePtr tree (new TreeType);
-            tree->setInputCloud (cloud_rest);
+            tree->setInputCloud (cloud_abovePlane);
             std::vector<pcl::PointIndices> cluster_indices;
             pcl::EuclideanClusterExtraction<PointType> ec;
             ec.setClusterTolerance (0.02);
             ec.setMinClusterSize (100);
             ec.setMaxClusterSize (25000);
             ec.setSearchMethod (tree);
-            ec.setInputCloud (cloud_rest);
+            ec.setInputCloud (cloud_abovePlane);
             ec.extract (cluster_indices);
-//
-	  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud2 (new pcl::PointCloud<pcl::PointXYZ>);
-	  cloud2->points.resize(cloud_rest->size());
-	  cloud2->width=cloud_rest->width;
-	  cloud2->height=cloud_rest->height;
-	  for (size_t i = 0; i < cloud_rest->points.size(); i++)
-	  {
-    	  cloud2->points[i].x = cloud_rest->points[i].x;
-    	  cloud2->points[i].y = cloud_rest->points[i].y;
-    	  cloud2->points[i].z = cloud_rest->points[i].z;
-	  }
-
-//
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud2 (new pcl::PointCloud<pcl::PointXYZ>);
+            cloud2->points.resize(cloud_abovePlane->size());
+            cloud2->width=cloud_abovePlane->width;
+            cloud2->height=cloud_abovePlane->height;
+            for (size_t i = 0; i < cloud_abovePlane->points.size(); i++)
+            {
+                cloud2->points[i].x = cloud_abovePlane->points[i].x;
+                cloud2->points[i].y = cloud_abovePlane->points[i].y;
+                cloud2->points[i].z = cloud_abovePlane->points[i].z;
+            }
             int i = 0;
             pcl::PCDWriter writer;
             for(int count=0;count<100;count++)
@@ -336,8 +320,7 @@ public:
                 status=mkdir(dirName, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
                 for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
                 {
-                    //CloudPtr cloud_cluster (new Cloud);
-    		    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster (new pcl::PointCloud<pcl::PointXYZ>);
+                    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster (new pcl::PointCloud<pcl::PointXYZ>);
                     for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); pit++)
                         cloud_cluster->points.push_back (cloud2->points[*pit]);
                     cloud_cluster->width = cloud_cluster->points.size ();
