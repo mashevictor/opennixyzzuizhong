@@ -119,8 +119,19 @@ public:
   cloud_callback (const CloudConstPtr& cloud)
   {
     FPS_CALC ("cloud callback");
+    char filename[20] = {0};
     boost::mutex::scoped_lock lock (cloud_mutex_);
     cloud_ = cloud;
+    static int count=0;
+    count++;
+    if(count<50)
+    {
+    cout<<"最外面************* "<<count<<" is saved"<<endl;
+    sprintf(filename,"./data/%d.pcd",count);
+    pcl::io::savePCDFile (filename, *cloud);
+    }
+    else
+    exit(0);
   }
 
   void
@@ -312,59 +323,54 @@ public:
                 cloud2->points[i].z = cloud_abovePlane->points[i].z;
             }
             int i = 0;
-            pcl::PCDWriter writer;
-            for(int count=0;count<100;count++)
+            double now = pcl::getTime ();
+            char *dirName=new char[20] ;
+            int status;
+            sprintf(dirName,"%f",now);
+            status=mkdir(dirName, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+            for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
             {
-                double now = pcl::getTime ();
-                char *dirName=new char[20] ;
-                int status;
-                cout<<"the "<<count<<" is saved"<<endl;
-                sprintf(dirName,"%f",now,count);
-                status=mkdir(dirName, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-                for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin (); it != cluster_indices.end (); ++it)
+                pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster (new pcl::PointCloud<pcl::PointXYZ>);
+                for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); pit++)
+                    cloud_cluster->points.push_back (cloud2->points[*pit]);
+                cloud_cluster->width = cloud_cluster->points.size ();
+                cloud_cluster->height = 1;
+                cloud_cluster->is_dense = true;
+                pcl::visualization::PointCloudColorHandlerRandom<pcl::PointXYZ> random(cloud_cluster);
+                pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normalEstimation;
+                pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
+                normalEstimation.setInputCloud (cloud_cluster);
+                pcl::search::KdTree<pcl::PointXYZ>::Ptr tree_xyz(new pcl::search::KdTree<pcl::PointXYZ>);
+                normalEstimation.setSearchMethod (tree_xyz);
+                normalEstimation.setRadiusSearch(0.03);
+                normalEstimation.compute (*normals);
+                pcl::CVFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::VFHSignature308> cvfh;
+                cvfh.setInputCloud (cloud_cluster);
+                cvfh.setInputNormals(normals);
+                cvfh.setSearchMethod (tree_xyz);
+                cvfh.setEPSAngleThreshold(5.0 / 180.0 * M_PI);
+                cvfh.setCurvatureThreshold(1.0);
+                cvfh.setNormalizeBins(false);
+                pcl::PointCloud<pcl::VFHSignature308>::Ptr vfhs(new pcl::PointCloud<pcl::VFHSignature308>);
+                cvfh.compute (*vfhs);
+                char filename[20] = {0};
+                char filename_temp[20] = {0};
+                char filename_vfhs[20] = {0};
+                static int i=0;
+                std::cout<<"cluster********** "<<i<<" is saved"<<std::endl;
+                std::cout<<"dirName= "<<dirName<<std::endl;
+                sprintf(filename_temp,"./%s/",dirName);
+                sprintf(filename,"%s%d.pcd",filename_temp,i);
+                sprintf(filename_vfhs,"%s%d_vfhs.pcd",filename_temp,i);
+                std::cout<<"filename= "<<filename<<std::endl;
+                if (!cloud_viewer_->updatePointCloud (cloud_cluster, random, filename))
                 {
-                    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster (new pcl::PointCloud<pcl::PointXYZ>);
-                    for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); pit++)
-                        cloud_cluster->points.push_back (cloud2->points[*pit]);
-                    cloud_cluster->width = cloud_cluster->points.size ();
-                    cloud_cluster->height = 1;
-                    cloud_cluster->is_dense = true;
-                    pcl::visualization::PointCloudColorHandlerRandom<pcl::PointXYZ> random(cloud_cluster);
-                    pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normalEstimation;
-                    pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
-                    normalEstimation.setInputCloud (cloud_cluster);
-                    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree_xyz(new pcl::search::KdTree<pcl::PointXYZ>);
-                    normalEstimation.setSearchMethod (tree_xyz);
-                    normalEstimation.setRadiusSearch(0.03);
-                    normalEstimation.compute (*normals);
-                    pcl::CVFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::VFHSignature308> cvfh;
-                    cvfh.setInputCloud (cloud_cluster);
-                    cvfh.setInputNormals(normals);
-                    cvfh.setSearchMethod (tree_xyz);
-                    cvfh.setEPSAngleThreshold(5.0 / 180.0 * M_PI);
-                    cvfh.setCurvatureThreshold(1.0);
-                    cvfh.setNormalizeBins(false);
-                    pcl::PointCloud<pcl::VFHSignature308>::Ptr vfhs(new pcl::PointCloud<pcl::VFHSignature308>);
-                    cvfh.compute (*vfhs);
-                    char filename[20] = {0};
-                    char filename_temp[20] = {0};
-                    char filename_vfhs[20] = {0};
-                    static int i=0;
-                    std::cout<<"the "<<i<<" is saved"<<std::endl;
-                    std::cout<<"dirName= "<<dirName<<std::endl;
-                    sprintf(filename_temp,"./%s/",dirName);
-                    sprintf(filename,"%s%d.pcd",filename_temp,i);
-                    sprintf(filename_vfhs,"%s%d_vfhs.pcd",filename_temp,i);
-                    std::cout<<"filename= "<<filename<<std::endl;
-                    if (!cloud_viewer_->updatePointCloud (cloud_cluster, random, filename))
-                    {
-                        cloud_viewer_->addPointCloud (cloud_cluster, random, filename);
-                    }
-                    pcl::io::savePCDFile (filename, *cloud_cluster);
-                    pcl::io::savePCDFile (filename_vfhs, *vfhs,false);
-                    i++;
-                }//cluster循环结束
-            }//for文件夹循环结束
+                    cloud_viewer_->addPointCloud (cloud_cluster, random, filename);
+                }
+                pcl::io::savePCDFile (filename, *cloud_cluster);
+                pcl::io::savePCDFile (filename_vfhs, *vfhs,false);
+                i++;
+            }//cluster循环结束
       }//ifcloud循环结束
       if (image_mutex_.try_lock ())
       {
